@@ -1,7 +1,7 @@
-<script setup>
-const { data } = useFetch("/api/test");
-</script>
+<script setup></script>
 
 <template>
-  <div>{{ data }}</div>
+  <NuxtLayout>
+    <NuxtPage />
+  </NuxtLayout>
 </template>

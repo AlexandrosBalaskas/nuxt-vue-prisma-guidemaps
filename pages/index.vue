@@ -1,7 +1,7 @@
-<script setup>
-const { data } = useFetch("/api/test");
-</script>
-
 <template>
-  <div>{{ data }}</div>
+  <div>
+    <h1>Welcome to the Home Page</h1>
+  </div>
 </template>
+
+<script setup></script>
