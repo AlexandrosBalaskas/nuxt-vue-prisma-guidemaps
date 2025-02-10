@@ -1,38 +1,75 @@
 <template>
-  <div>
-    <input v-model="cityName" placeholder="Enter city name" />
-    <button @click="fetchKmlData">Generate KML</button>
+  <div class="wrapper">
+    <div class="glass-container">
+      <header>
+        <h1>🌍 KML Map Generator</h1>
+        <p>
+          Enter a city name below, and this app will generate a Google Map
+          displaying **cities of interest**.
+        </p>
+      </header>
 
-    <div v-if="kmlUrl" id="container">
-      <div id="map"></div>
+      <div class="input-section">
+        <input
+          v-model="cityName"
+          placeholder="Enter a city..."
+          class="input-field"
+        />
+        <button @click="fetchKmlData" class="generate-btn" :disabled="loading">
+          {{ loading ? "Generating..." : "Generate Map" }}
+        </button>
+      </div>
+
+      <div v-if="loading" class="loading">
+        <span class="spinner"></span> Generating your map...
+      </div>
+
+      <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
+
+      <div v-if="kmlUrl" id="map-container">
+        <div id="map"></div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from "vue";
+import { ref, watch, onMounted } from "vue";
 import { Loader } from "@googlemaps/js-api-loader";
 
 const cityName = ref("");
 const kmlUrl = ref(null);
 const center = ref(null);
+const loading = ref(false);
+const errorMessage = ref("");
 
 const fetchKmlData = async () => {
-  if (!cityName.value) return alert("Enter a city name!");
+  if (!cityName.value.trim()) {
+    errorMessage.value = "⚠️ Please enter a valid city name.";
+    return;
+  }
 
-  const res = await fetch("/api/generate-kml", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: cityName.value }),
-  });
-  const data = await res.json();
+  loading.value = true;
+  errorMessage.value = "";
 
-  if (data.success) {
-    kmlUrl.value = data.url;
-    center.value = data.center;
-    loadMap();
-  } else {
-    alert("Failed to generate KML.");
+  try {
+    const res = await fetch("/api/generate-kml", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: cityName.value }),
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      kmlUrl.value = data.url;
+      center.value = data.center;
+    } else {
+      throw new Error("❌ Failed to generate KML.");
+    }
+  } catch (error) {
+    errorMessage.value = error.message;
+  } finally {
+    loading.value = false;
   }
 };
 
@@ -70,15 +107,145 @@ watch(kmlUrl, (newUrl) => {
 </script>
 
 <style scoped>
-#container {
+/* Import Google Font */
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap");
+
+/* Apply Font Globally */
+* {
+  font-family: "Poppins", sans-serif;
+}
+
+/* Background Styling */
+.wrapper {
+  height: 100vh;
   display: flex;
-  height: 500px;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1e1e2e, #292943);
+  padding: 20px;
+}
+
+/* Glassmorphism Effect */
+.glass-container {
+  max-width: 600px;
+  width: 90%;
+  padding: 30px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  color: white;
+}
+
+/* Header */
+h1 {
+  font-size: 26px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+p {
+  font-size: 15px;
+  opacity: 0.8;
+  font-weight: 300;
+}
+
+/* Input & Button */
+.input-section {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.input-field {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 400;
+  color: white;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+  outline: none;
+}
+
+.input-field::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.generate-btn {
+  padding: 12px 16px;
+  background: #4a90e2;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.generate-btn:hover {
+  background: #357ab7;
+}
+
+.generate-btn:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
+
+/* Loading Spinner */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 400;
+  margin-top: 20px;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 3px solid transparent;
+  border-top: 3px solid #4a90e2;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Error Message */
+.error-message {
   margin-top: 10px;
+  color: #ff6b6b;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+/* Map Styling */
+#map-container {
+  margin-top: 20px;
+  height: 400px;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 #map {
-  flex: 2;
-  border: 2px solid #ddd;
+  width: 100%;
   height: 100%;
+  border-radius: 12px;
 }
 </style>
