@@ -1,5 +1,9 @@
 import { defineEventHandler, readBody } from "h3";
 import { XMLParser } from "fast-xml-parser";
+import { put } from "@vercel/blob";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 interface LatLng {
   latitude: number;
@@ -22,7 +26,9 @@ interface RouteRequest {
   units: string;
 }
 
-function extractCoordinatesFromKML(kmlString: string): RouteRequest | null {
+function extractCoordinatesFromKML(
+  kmlString: string
+): { request: RouteRequest; coordinates: LatLng[] } | null {
   try {
     const parser = new XMLParser({ ignoreAttributes: false });
     const kmlData = parser.parse(kmlString);
@@ -62,7 +68,7 @@ function extractCoordinatesFromKML(kmlString: string): RouteRequest | null {
       units: "IMPERIAL",
     };
 
-    return request;
+    return { request, coordinates };
   } catch (error) {
     console.error("Error parsing KML:", error);
     return null;
@@ -118,6 +124,34 @@ function insertPlacemarkIntoKML(exampleKml, generatedPlacemarkKml) {
     exampleKml.slice(insertIndex);
 
   return updatedKml;
+}
+
+function extractXMLFromKML(refinedKML) {
+  // Match the XML content within refinedKML
+  const match = refinedKML.match(/<\?xml[^>]*>.*<\/kml>/s);
+
+  if (match) {
+    return match[0]; // Return the extracted XML content
+  } else {
+    throw new Error("No valid KML XML content found");
+  }
+}
+
+function getCenterOfPlacemarks(placemarks) {
+  if (!placemarks.length) return null;
+
+  let sumLat = 0,
+    sumLng = 0;
+
+  placemarks.forEach(({ latitude, longitude }) => {
+    sumLat += latitude;
+    sumLng += longitude;
+  });
+
+  return {
+    latitude: sumLat / placemarks.length,
+    longitude: sumLng / placemarks.length,
+  };
 }
 
 const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY; // Store in .env file
@@ -194,10 +228,6 @@ export default defineEventHandler(async (event) => {
   try {
     const { text } = await readBody(event); // Get text input from request body
 
-    if (!text) {
-      throw createError({ statusCode: 400, statusMessage: "Text is required" });
-    }
-
     const url =
       "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-Coder-32B-Instruct/v1/chat/completions";
 
@@ -211,14 +241,16 @@ export default defineEventHandler(async (event) => {
       messages: [
         {
           role: "system",
-          content: `You are an AI that generates the content of .kml files. Always follow this template:\n${exampleKml} \n Use the same styles as this template and generate the placemarks with the city and number of placemarks the user will provide you`,
+          content: `You are an AI that generates the content of .kml files. Always follow this template:\n${exampleKml} \n Generate only the placemarks with the city and number of placemarks the user will provide you. The placemarks will always be cites of interest, user is a tourist that will go to the city. Make sure that the coordinates you provide actually refer to the cite of interest.`,
         },
         {
           role: "user",
-          content: `Hello, generate a kml file for Geneva and give me 5 placemarks`,
+          content: `Hello, I want to go to ${text}. I want to know what cites of interest to visit. Generate 5 placemarks for ${text}. Please make sure that the coordinates you provide refer to the actual place.`,
         },
       ],
     };
+
+    const startTime = performance.now();
 
     const response = await fetch(url, {
       method: "POST",
@@ -229,6 +261,14 @@ export default defineEventHandler(async (event) => {
     const result = await response.json();
     const KMLcontent = result.choices?.[0]?.message?.content;
 
+    const endTime = performance.now();
+    const responseTime = endTime - startTime;
+    console.log(
+      `API Response Time: ${responseTime.toFixed(2)} ms`,
+      KMLcontent,
+      "KML"
+    );
+
     if (!KMLcontent) {
       throw createError({
         statusCode: 500,
@@ -236,10 +276,11 @@ export default defineEventHandler(async (event) => {
       });
     }
 
+    // console.log(KMLcontent, "KML");
+
     const requestBody = extractCoordinatesFromKML(KMLcontent);
 
-    // console.log(content, "content", request);
-    // const parsedData = JSON.parse(content); // Convert response to JSON
+    const center = getCenterOfPlacemarks(requestBody?.coordinates);
 
     const mapsresponse = await fetch(
       "https://routes.googleapis.com/directions/v2:computeRoutes",
@@ -251,7 +292,7 @@ export default defineEventHandler(async (event) => {
           "X-Goog-FieldMask":
             "routes.duration,routes.distanceMeters,routes.polyline.geoJsonLinestring",
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(requestBody?.request),
       }
     );
 
@@ -267,10 +308,23 @@ export default defineEventHandler(async (event) => {
       KMLcontent,
       generatedPlacemarkKML
     );
-    console.log("generatedPlacemarkKML", refinedKML);
+
+    const refinedKMLXML = extractXMLFromKML(refinedKML);
+
+    const kmlBlob = new Blob([refinedKMLXML], {
+      type: "application/vnd.google-earth.kml+xml",
+    });
+    const filename = `uploads/${Date.now()}-refined.kml`;
+    const blob = await put(filename, kmlBlob, {
+      access: "public",
+    });
+
+    const newKml = await prisma.kmlFile.create({
+      data: { url: blob.url },
+    });
 
     // Do something with the extracted data (e.g., save to DB)
-    return { success: true, data: refinedKML };
+    return { success: true, url: blob.url, data: newKml, center };
   } catch (error: any) {
     console.error("Error:", error.message);
     return { success: false, error: error.message };
