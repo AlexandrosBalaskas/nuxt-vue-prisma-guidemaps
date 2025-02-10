@@ -41,8 +41,7 @@
 </template>
 <script setup>
 import { ref, watch } from "vue";
-import pkg from "@googlemaps/js-api-loader";
-const { Loader } = pkg;
+const { Loader } = await import("@googlemaps/js-api-loader");
 
 const cityName = ref("");
 const kmlUrl = ref(null);
