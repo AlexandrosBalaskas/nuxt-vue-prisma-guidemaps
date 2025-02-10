@@ -20,6 +20,9 @@
         <button @click="fetchKmlData" class="generate-btn" :disabled="loading">
           {{ loading ? "Generating..." : "Generate Map" }}
         </button>
+        <a :href="kmlUrl" v-if="kmlUrl" download="map.kml">
+          <button class="download-btn">Download</button>
+        </a>
       </div>
 
       <!-- Enhanced Loading Messages -->
@@ -253,5 +256,27 @@ p {
   width: 100%;
   height: 100%;
   border-radius: 12px;
+}
+/* Download Button Styling */
+
+.download-btn {
+  padding: 12px 16px;
+  background: #4a90e2;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.download-btn:hover {
+  background: #357ab7;
+}
+
+.download-btn:disabled {
+  background: #555;
+  cursor: not-allowed;
 }
 </style>
