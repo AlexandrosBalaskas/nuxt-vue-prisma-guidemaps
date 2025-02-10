@@ -2,10 +2,12 @@
   <div class="wrapper">
     <div class="glass-container">
       <header>
-        <h1>🌍 KML Map Generator</h1>
+        <h1>🌍 Plan your trip!</h1>
         <p>
-          Enter a city name below, and this app will generate a Google Map
-          displaying **cities of interest**.
+          Enter a city name below to view key points of interest and
+          directions.<br />
+          Download the map, upload it to Google My Maps, and navigate the city
+          easily on your phone!
         </p>
       </header>
 
@@ -20,8 +22,10 @@
         </button>
       </div>
 
+      <!-- Enhanced Loading Messages -->
       <div v-if="loading" class="loading">
-        <span class="spinner"></span> Generating your map...
+        <span class="spinner"></span>
+        <p>{{ loadingMessage }}</p>
       </div>
 
       <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
@@ -32,9 +36,8 @@
     </div>
   </div>
 </template>
-
 <script setup>
-import { ref, watch, onMounted } from "vue";
+import { ref, watch } from "vue";
 import { Loader } from "@googlemaps/js-api-loader";
 
 const cityName = ref("");
@@ -42,6 +45,7 @@ const kmlUrl = ref(null);
 const center = ref(null);
 const loading = ref(false);
 const errorMessage = ref("");
+const loadingMessage = ref("Generating cites of interest...");
 
 const fetchKmlData = async () => {
   if (!cityName.value.trim()) {
@@ -51,6 +55,13 @@ const fetchKmlData = async () => {
 
   loading.value = true;
   errorMessage.value = "";
+
+  // Set up loading messages
+  setTimeout(
+    () => (loadingMessage.value = "Applying directions / walking routes..."),
+    5000
+  );
+  setTimeout(() => (loadingMessage.value = "Generating Google Map..."), 10000);
 
   try {
     const res = await fetch("/api/generate-kml", {
@@ -110,12 +121,10 @@ watch(kmlUrl, (newUrl) => {
 /* Import Google Font */
 @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap");
 
-/* Apply Font Globally */
 * {
   font-family: "Poppins", sans-serif;
 }
 
-/* Background Styling */
 .wrapper {
   height: 100vh;
   display: flex;
@@ -125,7 +134,6 @@ watch(kmlUrl, (newUrl) => {
   padding: 20px;
 }
 
-/* Glassmorphism Effect */
 .glass-container {
   max-width: 600px;
   width: 90%;
@@ -139,7 +147,6 @@ watch(kmlUrl, (newUrl) => {
   color: white;
 }
 
-/* Header */
 h1 {
   font-size: 26px;
   font-weight: 600;
@@ -152,7 +159,6 @@ p {
   font-weight: 300;
 }
 
-/* Input & Button */
 .input-section {
   display: flex;
   gap: 10px;
@@ -198,7 +204,7 @@ p {
   cursor: not-allowed;
 }
 
-/* Loading Spinner */
+/* Loading Section */
 .loading {
   display: flex;
   align-items: center;
@@ -210,8 +216,8 @@ p {
 }
 
 .spinner {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border: 3px solid transparent;
   border-top: 3px solid #4a90e2;
   border-radius: 50%;
