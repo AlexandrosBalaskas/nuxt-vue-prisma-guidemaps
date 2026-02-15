@@ -2,6 +2,7 @@ import { defineEventHandler, readBody } from "h3";
 import { XMLParser } from "fast-xml-parser";
 import { put } from "@vercel/blob";
 import { PrismaClient } from "@prisma/client";
+import { InferenceClient } from "@huggingface/inference";
 
 const prisma = new PrismaClient();
 
@@ -27,7 +28,7 @@ interface RouteRequest {
 }
 
 function extractCoordinatesFromKML(
-  kmlString: string
+  kmlString: string,
 ): { request: RouteRequest; coordinates: LatLng[] } | null {
   try {
     const parser = new XMLParser({ ignoreAttributes: false });
@@ -228,35 +229,31 @@ export default defineEventHandler(async (event) => {
   try {
     const { text } = await readBody(event); // Get text input from request body
 
-    const url =
-      "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-Coder-32B-Instruct/v1/chat/completions";
-
-    const headers = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${HUGGINGFACE_API_KEY}`,
-    };
-
-    const data = {
-      model: "Qwen/Qwen2.5-Coder-32B-Instruct",
-      messages: [
-        {
-          role: "system",
-          content: `You are an AI that generates the content of .kml files. Always follow this template:\n${exampleKml} \n Generate only the placemarks with the city and number of placemarks the user will provide you. The placemarks will always be cites of interest, user is a tourist that will go to the city. Make sure that the coordinates you provide actually refer to the cite of interest.`,
-        },
-        {
-          role: "user",
-          content: `Hello, I want to go to ${text}. I want to know what cites of interest to visit. Generate 5 placemarks for ${text}. Please make sure that the coordinates you provide refer to the actual place.`,
-        },
-      ],
-    };
-
     const startTime = performance.now();
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(data),
-    });
+    const response = await fetch(
+      "https://router.huggingface.co/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${HUGGINGFACE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "Qwen/Qwen2.5-Coder-32B-Instruct",
+          messages: [
+            {
+              role: "system",
+              content: `You are an AI that generates the content of .kml files. Always follow this template:\n${exampleKml} \n Generate only the placemarks with the city and number of placemarks the user will provide you. The placemarks will always be cites of interest, user is a tourist that will go to the city. Make sure that the coordinates you provide actually refer to the cite of interest.`,
+            },
+            {
+              role: "user",
+              content: `Hello, I want to go to ${text}. I want to know what cites of interest to visit. Generate 8 placemarks for ${text}. Please make sure that the coordinates you provide refer to the actual place.`,
+            },
+          ],
+        }),
+      },
+    );
 
     const result = await response.json();
     const KMLcontent = result.choices?.[0]?.message?.content;
@@ -266,7 +263,7 @@ export default defineEventHandler(async (event) => {
     console.log(
       `API Response Time: ${responseTime.toFixed(2)} ms`,
       KMLcontent,
-      "KML"
+      "KML",
     );
 
     if (!KMLcontent) {
@@ -293,7 +290,7 @@ export default defineEventHandler(async (event) => {
             "routes.duration,routes.distanceMeters,routes.polyline.geoJsonLinestring",
         },
         body: JSON.stringify(requestBody?.request),
-      }
+      },
     );
 
     if (!mapsresponse.ok) {
@@ -306,7 +303,7 @@ export default defineEventHandler(async (event) => {
 
     const refinedKML = insertPlacemarkIntoKML(
       KMLcontent,
-      generatedPlacemarkKML
+      generatedPlacemarkKML,
     );
 
     const refinedKMLXML = extractXMLFromKML(refinedKML);
